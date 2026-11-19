@@ -1,0 +1,193 @@
+#!/usr/bin/env python3
+"""Generate the SH-3 recompiler's instruction templates from MAME's handlers.
+
+    tools/gen_sh3_templates.py
+
+Reads runtime/sh3/sh3_mame_defs.inc / sh3_mame_decls.inc (MAME 0.264's SH-3
+interpreter, imported by tools/import_mame.py) and writes:
+
+  runtime/recomp/sh3_probe.inc      a decoder: MAME's dispatch functions
+                                    (execute_one, op0010, execute_one_4000,
+                                    ...) copied into a class whose instruction
+                                    handlers only record which handler the
+                                    opcode reaches and with which arguments;
+  runtime/recomp/sh3_templates.inc  for every handler, its body as C:
+                                    "m_sh2_state->" becomes "S->", the memory
+                                    calls become the generated code's RB / RW /
+                                    RL / WB / WW / WL, "return" a jump to the
+                                    instruction's end, and the parameters
+                                    (m, n, i, d, opcode) placeholders the
+                                    translator fills with the decoded values.
+
+A handler that uses anything else of the device (other members, register
+banks, the exception logic, the FPU) is marked "callout": the generated code
+calls back into the interpreter for that one instruction.  Nothing else in a
+body is changed.
+"""
+import os
+import re
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+SH3 = os.path.join(HERE, "..", "runtime", "sh3")
+OUT = os.path.join(HERE, "..", "runtime", "recomp")
+
+DISPATCH = ["execute_one", "common_execute_one_0000", "common_execute_one_4000", "op0010", "op0011",
+            "op0110", "op1000", "op1100", "execute_one_0000", "execute_one_4000", "execute_one_f000",
+            "op1111_0x13", "op1111_0xf13"]
+MEMORY = {"read_byte": "RB", "read_word": "RW", "read_long": "RL",
+          "write_byte": "WB", "write_word": "WW", "write_long": "WL"}
+
+
+def functions(text):
+    """name -> (signature, body) of every "sh3_device::name(...)" definition."""
+    res = {}
+    for m in re.finditer(r"^(?:TIMER_CALLBACK_MEMBER\(sh3_device::(\w+)\)|[\w:<>\*&\s]*?\bsh3_device::(\w+)\s*\(([^)]*)\))", text, re.M):
+        name = m.group(1) or m.group(2)
+        i = text.index("{", m.end())
+        depth, j = 0, i
+        while True:
+            c = text[j]
+            if text.startswith("//", j):
+                j = text.index("\n", j)
+                continue
+            if text.startswith("/*", j):
+                j = text.index("*/", j) + 2
+                continue
+            if c == "{":
+                depth += 1
+            elif c == "}":
+                depth -= 1
+                if depth == 0:
+                    break
+            j += 1
+        res[name] = (m.group(3) or "", text[i + 1:j])
+    return res
+
+
+DECL = re.compile(r"^(\s*)(?:const\s+)?((?:unsigned\s+|signed\s+)?(?:u?int(?:8|16|32|64)_t|int|bool|long|short|char))\s+([^;]*);\s*$")
+
+
+def static_locals(body):
+    """Block-scope variables become static: one translation unit holds
+    thousands of instruction blocks, and TinyCC gives every block's locals
+    their own stack slots.  "T a = x, b;" -> "static T a; static T b; a = x;"
+    (the handlers assign their locals before reading them)."""
+    out = []
+    for line in body.split("\n"):
+        m = DECL.match(line)
+        if not m:
+            out.append(line)
+            continue
+        ind, ty, rest = m.group(1), m.group(2), m.group(3)
+        parts, depth, cur = [], 0, ""
+        for c in rest:
+            if c == "," and depth == 0:
+                parts.append(cur); cur = ""; continue
+            depth += c in "(["
+            depth -= c in ")]"
+            cur += c
+        parts.append(cur)
+        decls, inits = [], []
+        for d in parts:
+            if "=" in d:
+                name, val = d.split("=", 1)
+                decls.append("static %s %s;" % (ty, name.strip()))
+                inits.append("%s = %s;" % (name.strip(), val.strip()))
+            else:
+                decls.append("static %s %s;" % (ty, d.strip()))
+        out.append(ind + " ".join(decls + inits))
+    return "\n".join(out)
+
+
+def params(sig):
+    out = []
+    for p in sig.split(","):
+        p = p.strip()
+        if not p or p == "void":
+            continue
+        out.append(p.split()[-1])
+    return out
+
+
+def main():
+    defs = open(os.path.join(SH3, "sh3_mame_defs.inc")).read()
+    decls = open(os.path.join(SH3, "sh3_mame_decls.inc")).read()
+    funcs = functions(defs)
+    members = set(re.findall(r"\b(\w+)\s*\(", decls)) - {"TIMER_CALLBACK_MEMBER"}
+    # the handlers the dispatch functions reach
+    called = set()
+    for d in DISPATCH:
+        called |= set(re.findall(r"\b(\w+)\s*\(", funcs[d][1]))
+    handlers = sorted(n for n in called if n in funcs and n not in DISPATCH)
+
+    # ---- decoder
+    probe = ["// Generated by tools/gen_sh3_templates.py.  Do not edit.",
+             "// MAME 0.264's SH-3 dispatch functions (sh.cpp, sh4.cpp), whose handlers",
+             "// record the handler reached and its arguments instead of executing.",
+             "enum sh3_op_id {"]
+    for k, n in enumerate(handlers):
+        probe.append("\tOP_%s = %d," % (n, k))
+    probe.append("\tOP_COUNT = %d" % len(handlers))
+    probe.append("};")
+    probe.append("static const char *const sh3_op_names[OP_COUNT] = {")
+    probe.append("\t" + ", ".join('"%s"' % n for n in handlers))
+    probe.append("};")
+    probe.append("struct sh3_decode_probe {")
+    probe.append("\tint id = -1; uint32_t a[3] = {0, 0, 0}; int na = 0;")
+    probe.append("\tvoid rec(int k, int n, uint32_t x = 0, uint32_t y = 0, uint32_t z = 0) { id = k; na = n; a[0] = x; a[1] = y; a[2] = z; }")
+    # machine().debug_break() in the FPU dispatch: a call-out like dbreak
+    probe.append("\tstruct machine_stub { sh3_decode_probe *p; void debug_break() { p->rec(OP_dbreak, 0); } };")
+    probe.append("\tmachine_stub machine() { return machine_stub{this}; }")
+    for n in handlers:
+        ps = params(funcs[n][0])
+        sig = ", ".join("uint32_t %s" % p for p in ps)
+        probe.append("\tvoid %s(%s) { rec(OP_%s, %d%s); }" % (n, sig, n, len(ps), "".join(", " + p for p in ps)))
+    for d in DISPATCH:
+        sig, body = funcs[d]
+        probe.append("\tvoid %s(%s)\n\t{%s}" % (d, sig.strip(), body))
+    probe.append("};")
+    open(os.path.join(OUT, "sh3_probe.inc"), "w").write("\n".join(probe) + "\n")
+
+    # ---- templates
+    out = ["// Generated by tools/gen_sh3_templates.py from MAME 0.264's SH-3 handlers",
+           "// (runtime/sh3/sh3_mame_defs.inc).  Do not edit.",
+           "struct sh3_template { const char *name; int callout; int nparams; const char *params[3]; const char *body; };",
+           "static const sh3_template sh3_templates[OP_COUNT] = {"]
+    ncall = 0
+    for n in handlers:
+        sig, body = funcs[n]
+        ps = params(sig)
+        b = re.sub(r"#if BUSY_LOOP_HACKS.*?#endif", "", body, flags=re.S)   # BUSY_LOOP_HACKS is 0
+        b = re.sub(r"//[^\n]*", "", b)
+        b = re.sub(r"/\*.*?\*/", "", b, flags=re.S)
+        uses = set(re.findall(r"\b(\w+)\s*\(", b)) & members
+        uses -= set(MEMORY)
+        mvars = set(re.findall(r"\bm_\w+", b)) - {"m_sh2_state", "m_delay"}
+        callout = bool(uses) or bool(mvars) or "machine()" in b or n.startswith("F") or "FP_" in b \
+            or n in ("SLEEP", "TRAPA", "RTE", "LDCSR", "LDCMSR", "ILLEGAL", "TODO", "LDTLB", "dbreak", "PREFM")
+        # the delayed / taken branches keep their bodies: the translator
+        # knows their targets
+        if callout:
+            ncall += 1
+            out.append('\t{ "%s", 1, %d, { %s }, nullptr },' % (n, len(ps), ", ".join('"%s"' % p for p in ps) or "nullptr"))
+            continue
+        b = b.replace("m_sh2_state->", "S->")
+        for k, v in MEMORY.items():
+            b = re.sub(r"\b%s\s*\(" % k, v + "(", b)
+        b = re.sub(r"\butil::sext\s*\(", "SEXT(", b)
+        b = re.sub(r"\breturn\s*;", "goto @END@;", b)
+        # C++ direct initialisation "T x(v);" -> "T x = v;"
+        b = re.sub(r"\b((?:u?int\d+_t|bool|int)\s+\w+)\(([^;]*)\);", r"\1 = \2;", b)
+        b = static_locals(b)
+        for p in ps:
+            b = re.sub(r"\b%s\b" % re.escape(p), "@%s@" % p, b)
+        b = b.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\t", " ")
+        b = re.sub(r" +", " ", b)
+        out.append('\t{ "%s", 0, %d, { %s }, "%s" },' % (n, len(ps), ", ".join('"%s"' % p for p in ps) or "nullptr", b))
+    out.append("};")
+    open(os.path.join(OUT, "sh3_templates.inc"), "w").write("\n".join(out) + "\n")
+    print("%d handlers, %d call back into the interpreter" % (len(handlers), ncall))
+
+
+if __name__ == "__main__":
+    main()

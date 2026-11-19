@@ -1,0 +1,49 @@
+Portions of this project are derived from MAME 0.264 source files that are
+distributed under the BSD-3-Clause licence:
+
+  src/devices/cpu/sh/sh.cpp                              copyright-holders: David Haywood
+  src/devices/cpu/sh/sh4.cpp, sh4comn.cpp, sh3comn.cpp,
+          sh4tmu.cpp, sh4dmac.cpp, sh3comn.h, sh4regs.h  copyright-holders: R. Belmont
+  src/mame/cave/cv1k.cpp, ep1c12.cpp, ep1c12.h           copyright-holders: David Haywood, Luca Elia, MetalliC
+  src/mame/cave/ep1c12_blit*.cpp, ep1c12in.ipp,
+          ep1c12pixel.ipp                                copyright-holders: David Haywood
+  src/devices/sound/ymz770.cpp                           copyright-holders: Olivier Galibert, R. Belmont, MetalliC
+  src/devices/sound/mpeg_audio.cpp, mpeg_audio.h         copyright-holders: Olivier Galibert
+  src/devices/machine/nandflash.cpp                      copyright-holders: Raphael Nabet
+  src/devices/machine/rtc9701.cpp                        copyright-holders: Angelo Salese, David Haywood
+  src/emu/attotime.*, schedule.cpp, diexec.cpp,
+          screen.cpp, sound.cpp                          copyright-holders: Aaron Giles, Olivier Galibert
+
+The SH-3 interpreter and the device functions are MAME's code, imported by
+tools/import_mame.py with the MAME device framework replaced; the board and
+the scheduler behaviour are ported in runtime/ (see docs/MODIFIED_FILES.md).
+The recompiler's templates (runtime/recomp/sh3_templates.inc) are generated
+from MAME's SH-3 handlers.
+
+Copyright (c) the copyright holders listed above.
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this
+   list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice,
+   this list of conditions and the following disclaimer in the documentation
+   and/or other materials provided with the distribution.
+
+3. Neither the name of the copyright holder nor the names of its contributors
+   may be used to endorse or promote products derived from this software
+   without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.

@@ -1,0 +1,31 @@
+{
+  "id": "ddpdfk",
+  "title": "Dai-Fukkatsu Ver 1.5",
+  "subtitle": "Cave CV1000-D - SH-3 program recompiled to native code",
+  "manufacturer": "Cave (AMI license)",
+  "year": 2008,
+  "rom_hint": "ddpdfk.zip",
+  "mame_set": "ddpdfk",
+  "players": 2,
+  "display": {
+    "aspect": "4:3",
+    "rotation": 270,
+    "integer_scale": false
+  },
+  "features": {
+    "save_states": true,
+    "rewind": true,
+    "nvram": true,
+    "input_movies": true,
+    "gadgets": true,
+    "input_display": true,
+    "screenshots": true,
+    "widescreen": false
+  },
+  "controls": {
+    "layout": "8-way stick, 4 buttons"
+  },
+  "theme": {
+    "accent": "Crimson"
+  }
+}

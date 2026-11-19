@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=DoDonPachi Dai-Fukkatsu Recomp
+Comment=DoDonPachi Dai-Fukkatsu Ver 1.5, Ver 1.0 and Black Label; requires your own MAME ROM sets
+Exec=dfk-recomp
+Icon=dfk-recomp
+Categories=Game;ArcadeGame;
+Terminal=false

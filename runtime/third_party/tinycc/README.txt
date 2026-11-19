@@ -1,0 +1,1 @@
+TinyCC 0.9.28rc (git mob f830a169, https://repo.or.cz/tinycc.git), LGPL-2.1-or-later (COPYING). Only the files needed to compile C to x86-64 code in memory (ONE_SOURCE build of libtcc.c); config.h is this project's. Unchanged otherwise.
